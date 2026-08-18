@@ -2,9 +2,9 @@
 //  RecipeListView.swift
 //  HomeChef AI
 //
-//  Muestra las recetas generadas (@Query) y dispara la generación real con
-//  GeminiAIService a través de RecipeViewModel. Refleja el estado de carga
-//  (spinner en el botón) y muestra un alert si algo falla.
+//  Muestra las recetas generadas (@Query), dispara la generación real con
+//  GeminiAIService, y ahora permite eliminar una receta guardada mediante
+//  swipe-to-delete (modelContext.delete).
 //
 
 import SwiftUI
@@ -37,6 +37,13 @@ struct RecipeListView: View {
                     ForEach(recipes) { recipe in
                         NavigationLink(value: recipe) {
                             RecipeRow(recipe: recipe)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                delete(recipe)
+                            } label: {
+                                Label("Eliminar", systemImage: "trash")
+                            }
                         }
                     }
                 }
@@ -72,6 +79,10 @@ struct RecipeListView: View {
                 }
             )
         }
+    }
+
+    private func delete(_ recipe: Recipe) {
+        modelContext.delete(recipe)
     }
 
     private var errorMessage: String? {

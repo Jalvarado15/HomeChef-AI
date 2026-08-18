@@ -13,11 +13,12 @@
 		3EE3EF1D303271FB0017D337 /* InventoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE3EF1C303271FB0017D337 /* InventoryViewModel.swift */; };
 		3EE3EF263032835C0017D337 /* CategoryColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE3EF253032835C0017D337 /* CategoryColor.swift */; };
 		3EE3EF29303283F80017D337 /* RecipeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE3EF28303283F80017D337 /* RecipeDetailView.swift */; };
-		3EE3EF2A303283F80017D337 /* InventoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE3EF27303283F80017D337 /* InventoryView.swift */; };
 		3EE3EF2D3032BBFE0017D337 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE3EF2C3032BBFE0017D337 /* Secrets.swift */; };
 		3EE3EF303032BC650017D337 /* GeminiAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE3EF2F3032BC650017D337 /* GeminiAIService.swift */; };
 		3EE3EF323032BD020017D337 /* RecipeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE3EF313032BD020017D337 /* RecipeViewModel.swift */; };
-		3EE3EF343032BD280017D337 /* RecipeListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE3EF333032BD280017D337 /* RecipeListView.swift */; };
+		3EE3EF3C303425460017D337 /* EditInventoryItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE3EF3B303425460017D337 /* EditInventoryItemView.swift */; };
+		3EE3EF3F3034258B0017D337 /* RecipeListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE3EF3E3034258B0017D337 /* RecipeListView.swift */; };
+		3EE3EF403034258B0017D337 /* InventoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE3EF3D3034258B0017D337 /* InventoryView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,12 +28,13 @@
 		3EE3EF18303271E40017D337 /* AddInventoryItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddInventoryItemView.swift; sourceTree = "<group>"; };
 		3EE3EF1C303271FB0017D337 /* InventoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryViewModel.swift; sourceTree = "<group>"; };
 		3EE3EF253032835C0017D337 /* CategoryColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryColor.swift; sourceTree = "<group>"; };
-		3EE3EF27303283F80017D337 /* InventoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryView.swift; sourceTree = "<group>"; };
 		3EE3EF28303283F80017D337 /* RecipeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeDetailView.swift; sourceTree = "<group>"; };
 		3EE3EF2C3032BBFE0017D337 /* Secrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Secrets.swift; sourceTree = "<group>"; };
 		3EE3EF2F3032BC650017D337 /* GeminiAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiAIService.swift; sourceTree = "<group>"; };
 		3EE3EF313032BD020017D337 /* RecipeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeViewModel.swift; sourceTree = "<group>"; };
-		3EE3EF333032BD280017D337 /* RecipeListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeListView.swift; sourceTree = "<group>"; };
+		3EE3EF3B303425460017D337 /* EditInventoryItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditInventoryItemView.swift; sourceTree = "<group>"; };
+		3EE3EF3D3034258B0017D337 /* InventoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryView.swift; sourceTree = "<group>"; };
+		3EE3EF3E3034258B0017D337 /* RecipeListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeListView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -89,9 +91,10 @@
 			isa = PBXGroup;
 			children = (
 				3EE3EF18303271E40017D337 /* AddInventoryItemView.swift */,
-				3EE3EF27303283F80017D337 /* InventoryView.swift */,
 				3EE3EF28303283F80017D337 /* RecipeDetailView.swift */,
-				3EE3EF333032BD280017D337 /* RecipeListView.swift */,
+				3EE3EF3B303425460017D337 /* EditInventoryItemView.swift */,
+				3EE3EF3D3034258B0017D337 /* InventoryView.swift */,
+				3EE3EF3E3034258B0017D337 /* RecipeListView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -207,12 +210,13 @@
 				3EE3EF1B303271E40017D337 /* AddInventoryItemView.swift in Sources */,
 				3EE3EF2D3032BBFE0017D337 /* Secrets.swift in Sources */,
 				3EE3EF29303283F80017D337 /* RecipeDetailView.swift in Sources */,
-				3EE3EF2A303283F80017D337 /* InventoryView.swift in Sources */,
 				3EE3EF14303266500017D337 /* InventoryItem.swift in Sources */,
 				3EE3EF303032BC650017D337 /* GeminiAIService.swift in Sources */,
+				3EE3EF3C303425460017D337 /* EditInventoryItemView.swift in Sources */,
 				3EE3EF323032BD020017D337 /* RecipeViewModel.swift in Sources */,
 				3EE3EF15303266500017D337 /* Recipe.swift in Sources */,
-				3EE3EF343032BD280017D337 /* RecipeListView.swift in Sources */,
+				3EE3EF3F3034258B0017D337 /* RecipeListView.swift in Sources */,
+				3EE3EF403034258B0017D337 /* InventoryView.swift in Sources */,
 				3EE3EF263032835C0017D337 /* CategoryColor.swift in Sources */,
 				3EE3EF1D303271FB0017D337 /* InventoryViewModel.swift in Sources */,
 			);

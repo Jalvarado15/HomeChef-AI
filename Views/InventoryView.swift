@@ -3,8 +3,8 @@
 //  HomeChef AI
 //
 //  Vista principal del inventario. Muestra todos los InventoryItem
-//  guardados usando @Query, con un diseño de tarjetas estilizadas
-//  (sombra suave, esquinas redondeadas, badge de categoría por color).
+//  guardados usando @Query, con tarjetas estilizadas y dos acciones de
+//  swipe: Editar (borde izquierdo) y Eliminar (borde derecho, destructivo).
 //
 
 import SwiftUI
@@ -17,6 +17,7 @@ struct InventoryView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var isShowingAddSheet = false
+    @State private var itemToEdit: InventoryItem?
 
     var body: some View {
         NavigationStack {
@@ -34,8 +35,22 @@ struct InventoryView: View {
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                                 .listRowBackground(Color.clear)
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        delete(item)
+                                    } label: {
+                                        Label("Eliminar", systemImage: "trash")
+                                    }
+                                }
+                                .swipeActions(edge: .leading) {
+                                    Button {
+                                        itemToEdit = item
+                                    } label: {
+                                        Label("Editar", systemImage: "pencil")
+                                    }
+                                    .tint(.blue)
+                                }
                         }
-                        .onDelete(perform: deleteItems)
                     }
                     .listStyle(.plain)
                 }
@@ -53,13 +68,14 @@ struct InventoryView: View {
             .sheet(isPresented: $isShowingAddSheet) {
                 AddInventoryItemView()
             }
+            .sheet(item: $itemToEdit) { item in
+                EditInventoryItemView(item: item)
+            }
         }
     }
 
-    private func deleteItems(at offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(items[index])
-        }
+    private func delete(_ item: InventoryItem) {
+        modelContext.delete(item)
     }
 }
 
