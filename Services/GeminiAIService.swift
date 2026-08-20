@@ -11,11 +11,17 @@
 //  NOTA: "gemini-1.5-flash" fue retirado por Google. Se usa "gemini-2.5-flash",
 //  el modelo estable equivalente disponible actualmente.
 //
+//  Fase 5: timeout explícito de 30s y mensajes de error diferenciados para
+//  timeout, sin conexión, y otros fallos de red, para que RecipeViewModel
+//  pueda mostrar algo útil en la UI en vez de un error genérico.
+//
 
 import Foundation
 
 enum GeminiAIServiceError: Error, LocalizedError {
     case invalidURL
+    case timeout
+    case noInternetConnection
     case network(Error)
     case invalidHTTPResponse(statusCode: Int, message: String)
     case decoding(Error)
@@ -25,12 +31,16 @@ enum GeminiAIServiceError: Error, LocalizedError {
         switch self {
         case .invalidURL:
             return "URL del servicio de IA inválida."
+        case .timeout:
+            return "La solicitud tardó demasiado en responder. Verifica tu conexión e intenta de nuevo."
+        case .noInternetConnection:
+            return "No hay conexión a internet. Verifica tu red e intenta de nuevo."
         case .network(let error):
             return "Error de conexión: \(error.localizedDescription)"
         case .invalidHTTPResponse(let statusCode, let message):
             return "El servicio de IA respondió con un error (\(statusCode)): \(message)"
         case .decoding:
-            return "No se pudo interpretar la respuesta del servicio de IA."
+            return "No se pudo interpretar la respuesta del servicio de IA. Intenta de nuevo."
         case .emptyContent:
             return "El servicio de IA no devolvió contenido para generar la receta."
         }
@@ -41,6 +51,7 @@ struct GeminiAIService {
     private let apiKey: String
     private let model = "gemini-3.5-flash"
     private let baseURL = "https://generativelanguage.googleapis.com/v1beta/models"
+    private let requestTimeout: TimeInterval = 30
 
     init(apiKey: String = Secrets.geminiAPIKey) {
         self.apiKey = apiKey
@@ -48,7 +59,7 @@ struct GeminiAIService {
 
     /// Genera una receta a partir de los ingredientes del inventario, usando
     /// la API real de Gemini. Lanza un error tipado si algo falla en el
-    /// camino (red, HTTP, parseo).
+    /// camino (red, timeout, HTTP, parseo).
     func generateRecipe(from ingredients: [InventoryItem]) async throws -> Recipe {
         guard !ingredients.isEmpty else {
             throw GeminiAIServiceError.emptyContent
@@ -58,7 +69,7 @@ struct GeminiAIService {
             throw GeminiAIServiceError.invalidURL
         }
 
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, timeoutInterval: requestTimeout)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(
@@ -71,6 +82,8 @@ struct GeminiAIService {
         let response: URLResponse
         do {
             (data, response) = try await URLSession.shared.data(for: request)
+        } catch let urlError as URLError {
+            throw mappedError(from: urlError)
         } catch {
             throw GeminiAIServiceError.network(error)
         }
@@ -95,6 +108,19 @@ struct GeminiAIService {
         }
 
         return recipe(from: rawText)
+    }
+
+    // MARK: - Mapeo de errores de red
+
+    private func mappedError(from urlError: URLError) -> GeminiAIServiceError {
+        switch urlError.code {
+        case .timedOut:
+            return .timeout
+        case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed:
+            return .noInternetConnection
+        default:
+            return .network(urlError)
+        }
     }
 
     // MARK: - Prompt
