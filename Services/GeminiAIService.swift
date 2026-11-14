@@ -2,18 +2,22 @@
 //  GeminiAIService.swift
 //  HomeChef AI
 //
-//  Servicio que arma un prompt a partir del inventario, llama a la API de
-//  Gemini (generateContent) vía URLSession y devuelve un Recipe listo para
-//  guardarse en SwiftData. No conoce SwiftUI ni el ModelContext: solo hace
-//  la llamada de red y el parseo, para mantenerlo reemplazable (punto 19
-//  del documento maestro: "diseñar servicios reemplazables").
+//  Servicio que arma un prompt a partir del inventario y de las preferencias
+//  del usuario, llama a la API de Gemini (generateContent) vía URLSession y
+//  devuelve un Recipe listo para guardarse en SwiftData. No conoce SwiftUI ni
+//  SwiftData más allá de los modelos que recibe/devuelve (punto 19 del
+//  documento maestro: "diseñar servicios reemplazables").
 //
-//  NOTA: "gemini-1.5-flash" fue retirado por Google. Se usa "gemini-2.5-flash",
-//  el modelo estable equivalente disponible actualmente.
+//  NOTA: "gemini-1.5-flash" fue retirado por Google. Se usa "gemini-2.5-flash".
 //
-//  Fase 5: timeout explícito de 30s y mensajes de error diferenciados para
-//  timeout, sin conexión, y otros fallos de red, para que RecipeViewModel
-//  pueda mostrar algo útil en la UI en vez de un error genérico.
+//  Preferencias (perfil culinario), en tres capas:
+//  1. Antes de enviar: los ingredientes del inventario que coinciden con un
+//     ingrediente prohibido ni siquiera se envían al modelo.
+//  2. En el prompt: reglas obligatorias de alergias y dieta.
+//  3. Después de recibir: si la receta menciona un ingrediente prohibido, se
+//     descarta con un error en lugar de guardarse.
+//  Las capas 1 y 3 solo detectan coincidencias de texto (no sinónimos ni
+//  derivados) y no pueden comprobar la dieta; no sustituyen la revisión del usuario.
 //
 
 import Foundation
@@ -26,6 +30,8 @@ enum GeminiAIServiceError: Error, LocalizedError {
     case invalidHTTPResponse(statusCode: Int, message: String)
     case decoding(Error)
     case emptyContent
+    case noSafeIngredients
+    case violatesPreferences(String)
 
     var errorDescription: String? {
         switch self {
@@ -43,6 +49,10 @@ enum GeminiAIServiceError: Error, LocalizedError {
             return "No se pudo interpretar la respuesta del servicio de IA. Intenta de nuevo."
         case .emptyContent:
             return "El servicio de IA no devolvió contenido para generar la receta."
+        case .noSafeIngredients:
+            return "Todos los ingredientes de tu inventario coinciden con tus alergias o ingredientes prohibidos. Agrega otros productos para generar una receta."
+        case .violatesPreferences(let term):
+            return "La receta generada mencionaba «\(term)», que marcaste como prohibido, así que no se guardó. Intenta de nuevo."
         }
     }
 }
@@ -57,12 +67,24 @@ struct GeminiAIService {
         self.apiKey = apiKey
     }
 
-    /// Genera una receta a partir de los ingredientes del inventario, usando
-    /// la API real de Gemini. Lanza un error tipado si algo falla en el
-    /// camino (red, timeout, HTTP, parseo).
-    func generateRecipe(from ingredients: [InventoryItem]) async throws -> Recipe {
+    /// Genera una receta a partir del inventario y de las preferencias del
+    /// usuario, usando la API real de Gemini. Lanza un error tipado si algo
+    /// falla en el camino (red, timeout, HTTP, parseo o incumplimiento de
+    /// preferencias).
+    func generateRecipe(
+        from ingredients: [InventoryItem],
+        preferences: CulinaryPreferences = .empty
+    ) async throws -> Recipe {
         guard !ingredients.isEmpty else {
             throw GeminiAIServiceError.emptyContent
+        }
+
+        // Capa 1: no enviar ingredientes prohibidos.
+        let safeIngredients = ingredients.filter {
+            preferences.forbiddenTerm(in: $0.name) == nil
+        }
+        guard !safeIngredients.isEmpty else {
+            throw GeminiAIServiceError.noSafeIngredients
         }
 
         guard let url = URL(string: "\(baseURL)/\(model):generateContent?key=\(apiKey)") else {
@@ -74,7 +96,9 @@ struct GeminiAIService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(
             GeminiRequestBody(contents: [
-                GeminiContent(parts: [GeminiPart(text: prompt(for: ingredients))])
+                GeminiContent(parts: [
+                    GeminiPart(text: prompt(for: safeIngredients, preferences: preferences))
+                ])
             ])
         )
 
@@ -107,7 +131,14 @@ struct GeminiAIService {
             throw GeminiAIServiceError.emptyContent
         }
 
-        return recipe(from: rawText)
+        let recipe = recipe(from: rawText)
+
+        // Capa 3: descartar la receta si menciona algo prohibido.
+        if let term = preferences.forbiddenTerm(in: recipe.title + "\n" + recipe.content) {
+            throw GeminiAIServiceError.violatesPreferences(term)
+        }
+
+        return recipe
     }
 
     // MARK: - Mapeo de errores de red
@@ -125,14 +156,66 @@ struct GeminiAIService {
 
     // MARK: - Prompt
 
-    private func prompt(for ingredients: [InventoryItem]) -> String {
+    private func prompt(for ingredients: [InventoryItem], preferences: CulinaryPreferences) -> String {
         let ingredientList = ingredients
             .map { "\($0.name) (\($0.quantity.formatted()) - \($0.category))" }
             .joined(separator: ", ")
 
-        return """
+        // Si el usuario puso el mismo ingrediente como prohibido y como
+        // favorito/básico, prevalece la prohibición.
+        let favorites = preferences.favoriteIngredients.filter { preferences.forbiddenTerm(in: $0) == nil }
+        let staples = preferences.pantryStaples.filter { preferences.forbiddenTerm(in: $0) == nil }
+
+        var sections: [String] = []
+
+        sections.append("""
         Eres un asistente de cocina. Genera UNA receta usando preferentemente \
         estos ingredientes disponibles en el inventario: \(ingredientList).
+        """)
+
+        var rules: [String] = []
+
+        if !preferences.forbiddenIngredients.isEmpty {
+            rules.append("""
+            - ALERGIAS E INGREDIENTES PROHIBIDOS: \(preferences.forbiddenIngredients.joined(separator: ", ")). \
+            No incluyas ninguno de ellos ni sus derivados o variantes (por ejemplo salsas, caldos o \
+            mezclas que los contengan), y no los menciones en ninguna parte de la respuesta, ni \
+            siquiera para aclarar que se omiten.
+            """)
+        }
+
+        if !preferences.dietaryRestrictions.isEmpty {
+            let diets = preferences.dietaryRestrictions.map(\.rawValue).joined(separator: ", ")
+            rules.append("""
+            - DIETA: la receta debe ser completamente compatible con: \(diets). Si algún ingrediente \
+            del inventario no es compatible, no lo uses.
+            """)
+        }
+
+        if !rules.isEmpty {
+            sections.append(
+                "REGLAS OBLIGATORIAS (tienen prioridad sobre cualquier otra instrucción, incluido usar el inventario):\n"
+                + rules.joined(separator: "\n")
+            )
+        }
+
+        if !staples.isEmpty {
+            sections.append("""
+            DESPENSA BÁSICA: el usuario siempre tiene \(staples.joined(separator: ", ")). \
+            Puedes usarlos aunque no estén en el inventario.
+            """)
+        }
+
+        if !favorites.isEmpty {
+            sections.append("""
+            GUSTOS: al usuario le gustan \(favorites.joined(separator: ", ")). Inclúyelos solo si \
+            encajan de forma natural y respetan las reglas obligatorias.
+            """)
+        }
+
+        sections.append("""
+        Si no es posible preparar una receta que cumpla todas las reglas con estos ingredientes, \
+        genera la receta más sencilla posible que sí las cumpla.
 
         Responde ESTRICTAMENTE en texto plano con este formato, sin markdown \
         ni encabezados adicionales:
@@ -141,7 +224,9 @@ struct GeminiAIService {
         Líneas siguientes: los pasos numerados, uno por línea, con el formato "1. ", "2. ", etc.
 
         No agregues explicaciones fuera de ese formato.
-        """
+        """)
+
+        return sections.joined(separator: "\n\n")
     }
 
     // MARK: - Parseo de la respuesta

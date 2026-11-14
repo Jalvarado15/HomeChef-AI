@@ -2,9 +2,10 @@
 //  RecipeListView.swift
 //  HomeChef AI
 //
-//  Muestra las recetas generadas (@Query), dispara la generación real con
-//  GeminiAIService, y ahora permite eliminar una receta guardada mediante
-//  swipe-to-delete (modelContext.delete).
+//  Muestra las recetas generadas (@Query), dispara la generación con
+//  GeminiAIService (incluyendo las preferencias del perfil culinario),
+//  permite eliminar recetas, maneja inventario vacío y reintento ante errores.
+//  El icono de perfil de la barra abre UserProfileView.
 //
 
 import SwiftUI
@@ -15,10 +16,13 @@ struct RecipeListView: View {
     private var recipes: [Recipe]
 
     @Query private var inventoryItems: [InventoryItem]
+    @Query private var profiles: [UserProfile]
 
     @Environment(\.modelContext) private var modelContext
 
     @State private var viewModel = RecipeViewModel()
+    @State private var isShowingAddItemSheet = false
+    @State private var isShowingProfile = false
 
     private var isLoading: Bool {
         viewModel.state == .loading
@@ -53,11 +57,16 @@ struct RecipeListView: View {
                 RecipeDetailView(recipe: recipe)
             }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        isShowingProfile = true
+                    } label: {
+                        Label("Perfil culinario", systemImage: "person.crop.circle")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        Task {
-                            await viewModel.generateRecipe(from: inventoryItems, context: modelContext)
-                        }
+                        triggerGeneration()
                     } label: {
                         if isLoading {
                             ProgressView()
@@ -65,18 +74,59 @@ struct RecipeListView: View {
                             Label("Generar receta", systemImage: "sparkles")
                         }
                     }
-                    .disabled(inventoryItems.isEmpty || isLoading)
+                    .disabled(isLoading)
                 }
             }
+            .sheet(isPresented: $isShowingAddItemSheet) {
+                AddInventoryItemView()
+            }
+            .alert(
+                "Necesitas ingredientes primero",
+                isPresented: emptyInventoryAlertBinding,
+                actions: {
+                    Button("Agregar ingredientes") {
+                        viewModel.resetState()
+                        isShowingAddItemSheet = true
+                    }
+                    Button("Cancelar", role: .cancel) {
+                        viewModel.resetState()
+                    }
+                },
+                message: {
+                    Text("Tu inventario está vacío. Agrega al menos un producto para poder generar una receta.")
+                }
+            )
             .alert(
                 "No se pudo generar la receta",
                 isPresented: errorAlertBinding,
                 actions: {
-                    Button("OK", role: .cancel) { }
+                    Button("Reintentar") {
+                        viewModel.resetState()
+                        triggerGeneration()
+                    }
+                    Button("Cancelar", role: .cancel) {
+                        viewModel.resetState()
+                    }
                 },
                 message: {
                     Text(errorMessage ?? "")
                 }
+            )
+        }
+        .sheet(isPresented: $isShowingProfile) {
+            UserProfileView()
+        }
+    }
+
+    /// Punto único para disparar la generación, usado tanto por el botón
+    /// de la toolbar como por "Reintentar" en el alert de error.
+    private func triggerGeneration() {
+        let preferences = profiles.first?.preferences ?? .empty
+        Task {
+            await viewModel.generateRecipe(
+                from: inventoryItems,
+                preferences: preferences,
+                context: modelContext
             )
         }
     }
@@ -84,6 +134,8 @@ struct RecipeListView: View {
     private func delete(_ recipe: Recipe) {
         modelContext.delete(recipe)
     }
+
+    // MARK: - Alert bindings
 
     private var errorMessage: String? {
         if case .error(let message) = viewModel.state {
@@ -95,7 +147,18 @@ struct RecipeListView: View {
     private var errorAlertBinding: Binding<Bool> {
         Binding(
             get: { errorMessage != nil },
-            set: { _ in }
+            set: { isPresented in
+                if !isPresented { viewModel.resetState() }
+            }
+        )
+    }
+
+    private var emptyInventoryAlertBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.state == .emptyInventory },
+            set: { isPresented in
+                if !isPresented { viewModel.resetState() }
+            }
         )
     }
 }
@@ -123,5 +186,5 @@ private struct RecipeRow: View {
 
 #Preview {
     RecipeListView()
-        .modelContainer(for: [InventoryItem.self, Recipe.self], inMemory: true)
+        .modelContainer(for: [InventoryItem.self, Recipe.self, UserProfile.self], inMemory: true)
 }

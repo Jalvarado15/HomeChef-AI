@@ -15,7 +15,8 @@ struct HomeChefApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             InventoryItem.self,
-            Recipe.self
+            Recipe.self,
+            UserProfile.self
         ])
         let modelConfiguration = ModelConfiguration(
             schema: schema,

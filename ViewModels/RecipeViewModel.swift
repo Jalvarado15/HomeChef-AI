@@ -2,9 +2,10 @@
 //  RecipeViewModel.swift
 //  HomeChef AI
 //
-//  ViewModel para RecipeListView. Reemplaza el mock anterior por la llamada
-//  real a GeminiAIService, manejando estados de carga y error para que la
-//  vista pueda reaccionar (spinner, mensaje de error, etc.).
+//  ViewModel para RecipeListView. Antes de llamar a GeminiAIService, valida
+//  que haya ingredientes en el inventario; si está vacío, no se hace ninguna
+//  petición de red y el estado pasa a .emptyInventory. Las preferencias del
+//  perfil culinario se reciben como parámetro y se pasan al servicio.
 //
 
 import Foundation
@@ -16,6 +17,7 @@ final class RecipeViewModel {
     enum State: Equatable {
         case idle
         case loading
+        case emptyInventory
         case error(String)
     }
 
@@ -27,13 +29,22 @@ final class RecipeViewModel {
         self.aiService = aiService
     }
 
-    /// Genera una receta real con Gemini a partir del inventario y la guarda
-    /// en el contexto de SwiftData. Actualiza `state` para que la vista
-    /// muestre progreso o error según corresponda.
-    func generateRecipe(from ingredients: [InventoryItem], context: ModelContext) async {
+    /// Genera una receta real con Gemini a partir del inventario y de las
+    /// preferencias del usuario, y la guarda en el contexto de SwiftData.
+    /// Si `ingredients` está vacío, no se llama a la API.
+    func generateRecipe(
+        from ingredients: [InventoryItem],
+        preferences: CulinaryPreferences,
+        context: ModelContext
+    ) async {
+        guard !ingredients.isEmpty else {
+            state = .emptyInventory
+            return
+        }
+
         state = .loading
         do {
-            let recipe = try await aiService.generateRecipe(from: ingredients)
+            let recipe = try await aiService.generateRecipe(from: ingredients, preferences: preferences)
             context.insert(recipe)
             state = .idle
         } catch {
@@ -43,6 +54,12 @@ final class RecipeViewModel {
 
     func toggleSaved(_ recipe: Recipe) {
         recipe.isSaved.toggle()
+    }
+
+    /// Vuelve el estado a .idle, para cerrar alerts sin dejar el estado
+    /// "pegado" en .error o .emptyInventory.
+    func resetState() {
+        state = .idle
     }
 
     private func message(for error: Error) -> String {

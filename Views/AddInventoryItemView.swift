@@ -2,8 +2,9 @@
 //  AddInventoryItemView.swift
 //  HomeChef AI
 //
-//  Formulario en Sheet para agregar un InventoryItem. Usa InventoryViewModel
-//  para la validación y creación del item.
+//  Formulario en Sheet para agregar un InventoryItem. La categoría se elige
+//  con un Picker estandarizado y se sugiere automáticamente al escribir el
+//  nombre, hasta que el usuario la cambie manualmente.
 //
 
 import SwiftUI
@@ -18,14 +19,25 @@ struct AddInventoryItemView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Detalles del producto") {
+                Section {
                     TextField("Nombre", text: $viewModel.name)
 
                     TextField("Cantidad", text: $viewModel.quantityText)
                         .keyboardType(.decimalPad)
 
-                    TextField("Categoría", text: $viewModel.category)
+                    Picker("Categoría", selection: categoryBinding) {
+                        ForEach(IngredientCategory.allCases) { category in
+                            Text(category.rawValue).tag(category)
+                        }
+                    }
+                } header: {
+                    Text("Detalles del producto")
+                } footer: {
+                    Text("La categoría se sugiere según el nombre; puedes cambiarla cuando quieras.")
                 }
+            }
+            .onChange(of: viewModel.name) {
+                viewModel.nameDidChange()
             }
             .navigationTitle("Nuevo producto")
             .toolbar {
@@ -43,6 +55,15 @@ struct AddInventoryItemView: View {
                 }
             }
         }
+    }
+
+    /// Binding propio para distinguir un cambio hecho por el usuario
+    /// (marca la categoría como manual) de una sugerencia automática.
+    private var categoryBinding: Binding<IngredientCategory> {
+        Binding(
+            get: { viewModel.category },
+            set: { viewModel.selectCategory($0) }
+        )
     }
 }
 

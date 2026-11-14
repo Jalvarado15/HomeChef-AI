@@ -4,11 +4,11 @@
 //
 //  Formulario en Sheet para editar un InventoryItem existente.
 //
-//  Usa @Bindable directo sobre el @Model: es el patrón oficial recomendado
-//  por Apple para editar SwiftData (los TextField mutan el objeto en vivo,
-//  por lo que "por qué" no hay un botón "Cancelar" que revierta cambios:
-//  agregar un borrador/copia local solo para permitir deshacer sería
-//  sobreingeniería para este MVP — punto 19 del documento maestro).
+//  Usa @Bindable directo sobre el @Model (los cambios se aplican en vivo).
+//  La categoría se edita con el mismo Picker estandarizado que el alta.
+//  Compatibilidad: si el ítem trae un texto libre antiguo (p. ej. "Verduras"),
+//  el Picker muestra la categoría estándar equivalente y, al pulsar "Listo",
+//  el valor guardado se normaliza a esa categoría.
 //
 
 import SwiftUI
@@ -27,7 +27,11 @@ struct EditInventoryItemView: View {
                     TextField("Cantidad", value: $item.quantity, format: .number)
                         .keyboardType(.decimalPad)
 
-                    TextField("Categoría", text: $item.category)
+                    Picker("Categoría", selection: categoryBinding) {
+                        ForEach(IngredientCategory.allCases) { category in
+                            Text(category.rawValue).tag(category)
+                        }
+                    }
                 }
             }
             .navigationTitle("Editar producto")
@@ -35,11 +39,20 @@ struct EditInventoryItemView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Listo") {
+                        // Normaliza valores antiguos de texto libre.
+                        item.category = IngredientCategory(storedValue: item.category).rawValue
                         dismiss()
                     }
                 }
             }
         }
+    }
+
+    private var categoryBinding: Binding<IngredientCategory> {
+        Binding(
+            get: { IngredientCategory(storedValue: item.category) },
+            set: { item.category = $0.rawValue }
+        )
     }
 }
 

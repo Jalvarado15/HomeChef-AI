@@ -2,8 +2,8 @@
 //  InventoryViewModel.swift
 //  HomeChef AI
 //
-//  ViewModel para InventoryView. Encapsula la lógica de creación de
-//  InventoryItem para mantener la vista libre de lógica de negocio.
+//  ViewModel del formulario de alta de InventoryItem. Sugiere la categoría
+//  a partir del nombre mientras el usuario no la haya elegido a mano.
 //
 
 import Foundation
@@ -14,12 +14,27 @@ final class InventoryViewModel {
 
     var name: String = ""
     var quantityText: String = ""
-    var category: String = ""
+    private(set) var category: IngredientCategory = .otros
+
+    /// Una vez que el usuario elige una categoría manualmente, dejamos de
+    /// sobrescribirla con sugerencias automáticas.
+    private var isCategoryManuallySelected = false
 
     var isFormValid: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !category.trimmingCharacters(in: .whitespaces).isEmpty &&
         Double(quantityText) != nil
+    }
+
+    /// Llamar cuando cambia `name`: aplica la sugerencia local si procede.
+    func nameDidChange() {
+        guard !isCategoryManuallySelected else { return }
+        category = IngredientCategory.suggestCategory(for: name)
+    }
+
+    /// Llamar cuando el usuario cambia el Picker a mano.
+    func selectCategory(_ newCategory: IngredientCategory) {
+        isCategoryManuallySelected = true
+        category = newCategory
     }
 
     func addItem(to context: ModelContext) {
@@ -28,7 +43,7 @@ final class InventoryViewModel {
         let newItem = InventoryItem(
             name: name.trimmingCharacters(in: .whitespaces),
             quantity: quantity,
-            category: category.trimmingCharacters(in: .whitespaces)
+            category: category.rawValue
         )
 
         context.insert(newItem)
@@ -38,6 +53,7 @@ final class InventoryViewModel {
     func resetForm() {
         name = ""
         quantityText = ""
-        category = ""
+        category = .otros
+        isCategoryManuallySelected = false
     }
 }
