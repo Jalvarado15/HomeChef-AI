@@ -2,9 +2,10 @@
 //  UserProfileView.swift
 //  HomeChef AI
 //
-//  Pantalla de perfil culinario. Los cambios se aplican en vivo sobre el
-//  UserProfile (SwiftData), igual que en EditInventoryItemView. Incluye su
-//  propio NavigationStack para poder presentarse como sheet o como pestaña.
+//  Pantalla de perfil culinario. Cada cambio (toggle, alta o baja de un
+//  elemento) se guarda de inmediato en SwiftData a través del ViewModel.
+//  Incluye su propio NavigationStack para poder presentarse como sheet o
+//  como pestaña.
 //
 
 import SwiftUI
@@ -37,7 +38,7 @@ struct UserProfileView: View {
                 }
             }
             .task {
-                viewModel.ensureProfileExists(in: profiles, context: modelContext)
+                viewModel.ensureProfileExists(context: modelContext)
             }
         }
     }
@@ -94,18 +95,18 @@ struct UserProfileView: View {
                 Text(item)
             }
             .onDelete { offsets in
-                viewModel.remove(at: offsets, from: kind, in: profile)
+                viewModel.remove(at: offsets, from: kind, in: profile, context: modelContext)
             }
 
             HStack {
                 TextField(placeholder, text: draftBinding(for: kind))
                     .submitLabel(.done)
                     .onSubmit {
-                        viewModel.addDraft(for: kind, to: profile)
+                        viewModel.addDraft(for: kind, to: profile, context: modelContext)
                     }
 
                 Button {
-                    viewModel.addDraft(for: kind, to: profile)
+                    viewModel.addDraft(for: kind, to: profile, context: modelContext)
                 } label: {
                     Image(systemName: "plus.circle.fill")
                 }
@@ -124,7 +125,7 @@ struct UserProfileView: View {
     private func restrictionBinding(_ restriction: DietaryRestriction, in profile: UserProfile) -> Binding<Bool> {
         Binding(
             get: { viewModel.isSelected(restriction, in: profile) },
-            set: { viewModel.setRestriction(restriction, isOn: $0, in: profile) }
+            set: { viewModel.setRestriction(restriction, isOn: $0, in: profile, context: modelContext) }
         )
     }
 

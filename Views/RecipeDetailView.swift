@@ -14,6 +14,13 @@ import SwiftData
 struct RecipeDetailView: View {
     @Bindable var recipe: Recipe
 
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \InventoryItem.name) private var inventoryItems: [InventoryItem]
+
+    @State private var viewModel = RecipeDetailViewModel()
+
+    private let accent = Color(red: 0.30, green: 0.45, blue: 0.32) // basil
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -24,6 +31,9 @@ struct RecipeDetailView: View {
             .padding(20)
         }
         .background(Color(.systemGroupedBackground))
+        .safeAreaInset(edge: .bottom) {
+            cookedButton
+        }
         .navigationTitle("Detalle")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -36,6 +46,36 @@ struct RecipeDetailView: View {
                 }
             }
         }
+        .sheet(
+            isPresented: $viewModel.isShowingConfirmation,
+            onDismiss: { viewModel.clearDeductions() }
+        ) {
+            CookedConfirmationView(viewModel: viewModel) {
+                viewModel.confirmDeductions(inventory: inventoryItems, context: modelContext)
+            }
+        }
+        .alert("Nada que descontar", isPresented: $viewModel.isShowingNoMatchAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("No encontré en esta receta productos de tu inventario para descontar.")
+        }
+    }
+
+    /// Botón principal fijo en la parte inferior de la pantalla.
+    private var cookedButton: some View {
+        Button {
+            viewModel.prepareDeductions(for: recipe, inventory: inventoryItems)
+        } label: {
+            Label("¡Ya la cociné!", systemImage: "checkmark.circle.fill")
+                .font(.system(.headline, design: .rounded))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .tint(accent)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.bar)
     }
 
     private var header: some View {
