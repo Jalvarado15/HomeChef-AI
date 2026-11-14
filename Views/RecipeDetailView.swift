@@ -2,10 +2,10 @@
 //  RecipeDetailView.swift
 //  HomeChef AI
 //
-//  Muestra el contenido completo de una receta como una tarjeta de cocina:
-//  título en serif, párrafos generales como texto simple, y líneas
-//  numeradas del mock ("1. ...", "2. ...") renderizadas como pasos con
-//  badge circular, dentro de una sección destacada.
+//  Tarjeta de cocina con el contenido de la receta y el botón fijo
+//  "¡Ya la cociné!". Si el usuario decide no conservar la receta, se elimina
+//  una vez que la hoja de confirmación termina de cerrarse y esta pantalla
+//  se cierra sola.
 //
 
 import SwiftUI
@@ -15,13 +15,59 @@ struct RecipeDetailView: View {
     @Bindable var recipe: Recipe
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+
     @Query(sort: \InventoryItem.name) private var inventoryItems: [InventoryItem]
+    @Query private var profiles: [UserProfile]
 
     @State private var viewModel = RecipeDetailViewModel()
+
+    /// Se activa justo antes de eliminar la receta, para que la vista deje de
+    /// leerla mientras se cierra.
+    @State private var isDiscarded = false
 
     private let accent = Color(red: 0.30, green: 0.45, blue: 0.32) // basil
 
     var body: some View {
+        Group {
+            if isDiscarded {
+                Color(.systemGroupedBackground).ignoresSafeArea()
+            } else {
+                recipeContent
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if !isDiscarded {
+                cookedButton
+            }
+        }
+        .navigationTitle("Detalle")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if !isDiscarded {
+                    Button {
+                        recipe.isSaved.toggle()
+                    } label: {
+                        Image(systemName: recipe.isSaved ? "star.fill" : "star")
+                            .foregroundStyle(recipe.isSaved ? .yellow : .primary)
+                    }
+                }
+            }
+        }
+        .sheet(
+            isPresented: $viewModel.isShowingConfirmation,
+            onDismiss: handleSheetDismiss
+        ) {
+            CookedConfirmationView(viewModel: viewModel) {
+                viewModel.confirmDeductions(inventory: inventoryItems, context: modelContext)
+            }
+        }
+    }
+
+    // MARK: - Contenido
+
+    private var recipeContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
@@ -31,51 +77,6 @@ struct RecipeDetailView: View {
             .padding(20)
         }
         .background(Color(.systemGroupedBackground))
-        .safeAreaInset(edge: .bottom) {
-            cookedButton
-        }
-        .navigationTitle("Detalle")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    recipe.isSaved.toggle()
-                } label: {
-                    Image(systemName: recipe.isSaved ? "star.fill" : "star")
-                        .foregroundStyle(recipe.isSaved ? .yellow : .primary)
-                }
-            }
-        }
-        .sheet(
-            isPresented: $viewModel.isShowingConfirmation,
-            onDismiss: { viewModel.clearDeductions() }
-        ) {
-            CookedConfirmationView(viewModel: viewModel) {
-                viewModel.confirmDeductions(inventory: inventoryItems, context: modelContext)
-            }
-        }
-        .alert("Nada que descontar", isPresented: $viewModel.isShowingNoMatchAlert) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("No encontré en esta receta productos de tu inventario para descontar.")
-        }
-    }
-
-    /// Botón principal fijo en la parte inferior de la pantalla.
-    private var cookedButton: some View {
-        Button {
-            viewModel.prepareDeductions(for: recipe, inventory: inventoryItems)
-        } label: {
-            Label("¡Ya la cociné!", systemImage: "checkmark.circle.fill")
-                .font(.system(.headline, design: .rounded))
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .tint(accent)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(.bar)
     }
 
     private var header: some View {
@@ -89,6 +90,44 @@ struct RecipeDetailView: View {
                 .foregroundStyle(.secondary)
         }
     }
+
+    /// Botón principal fijo en la parte inferior de la pantalla.
+    private var cookedButton: some View {
+        Button {
+            viewModel.prepareDeductions(
+                for: recipe,
+                inventory: inventoryItems,
+                staples: profiles.flatMap(\.pantryStaples)
+            )
+        } label: {
+            Label("¡Ya la cociné!", systemImage: "checkmark.circle.fill")
+                .font(.system(.headline, design: .rounded))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .tint(accent)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.bar)
+    }
+
+    // MARK: - Cierre de la hoja
+
+    /// Cuando la hoja ya se cerró: si el usuario eligió no conservar la receta,
+    /// se elimina, se guarda y se cierra esta pantalla.
+    private func handleSheetDismiss() {
+        let shouldDiscard = viewModel.discardRecipeOnDismiss
+        viewModel.clearDeductions()
+
+        guard shouldDiscard else { return }
+
+        isDiscarded = true
+        viewModel.discard(recipe, context: modelContext)
+        dismiss()
+    }
+
+    // MARK: - Parseo del contenido
 
     /// Convierte recipe.content en bloques: párrafos normales o pasos
     /// numerados (líneas que empiezan con "1. ", "2. ", etc.).
@@ -188,19 +227,14 @@ private struct StepRow: View {
             recipe: Recipe(
                 title: "Receta sugerida con Tomate",
                 content: """
-                Ingredientes utilizados: Tomate, Cebolla, Ajo
-
-                Instrucciones (simuladas):
                 1. Prepara todos los ingredientes disponibles.
                 2. Combínalos según la técnica adecuada para cada uno.
                 3. Cocina a fuego medio hasta obtener el resultado deseado.
                 4. Sirve y disfruta.
-
-                (Este contenido es un mock temporal.)
                 """,
                 isSaved: false
             )
         )
     }
-    .modelContainer(for: [InventoryItem.self, Recipe.self], inMemory: true)
+    .modelContainer(for: [InventoryItem.self, Recipe.self, UserProfile.self], inMemory: true)
 }

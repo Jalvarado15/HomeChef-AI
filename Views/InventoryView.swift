@@ -14,6 +14,17 @@ struct InventoryView: View {
     @Query(sort: \InventoryItem.dateAdded, order: .reverse)
     private var items: [InventoryItem]
 
+    @Query private var profiles: [UserProfile]
+
+    /// Inventario sin los productos que el usuario declaró como básicos de su despensa.
+    private var visibleItems: [InventoryItem] {
+        let staples = profiles.flatMap(\.pantryStaples)
+        guard !staples.isEmpty else { return items }
+        return items.filter {
+            !IngredientMatcher.isPantryStaple(itemName: $0.name, staples: staples)
+        }
+    }
+
     @Environment(\.modelContext) private var modelContext
 
     @State private var isShowingAddSheet = false
@@ -22,7 +33,7 @@ struct InventoryView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if items.isEmpty {
+                if visibleItems.isEmpty {
                     ContentUnavailableView(
                         "Inventario vacío",
                         systemImage: "tray",
@@ -30,7 +41,7 @@ struct InventoryView: View {
                     )
                 } else {
                     List {
-                        ForEach(items) { item in
+                        ForEach(visibleItems) { item in
                             InventoryCard(item: item)
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
@@ -140,5 +151,5 @@ private struct CategoryBadge: View {
 
 #Preview {
     InventoryView()
-        .modelContainer(for: [InventoryItem.self, Recipe.self], inMemory: true)
+        .modelContainer(for: [InventoryItem.self, Recipe.self, UserProfile.self], inMemory: true)
 }

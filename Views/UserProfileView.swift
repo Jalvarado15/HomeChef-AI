@@ -2,8 +2,10 @@
 //  UserProfileView.swift
 //  HomeChef AI
 //
-//  Pantalla de perfil culinario. Cada cambio (toggle, alta o baja de un
-//  elemento) se guarda de inmediato en SwiftData a través del ViewModel.
+//  Pantalla de perfil culinario. Muestra y edita el perfil ACTIVO del
+//  ViewModel (la misma instancia que éste carga y guarda). Cada cambio
+//  (toggle, alta o baja) se guarda de inmediato; al cerrar la pantalla
+//  también se agrega lo que haya quedado escrito sin confirmar.
 //  Incluye su propio NavigationStack para poder presentarse como sheet o
 //  como pestaña.
 //
@@ -15,15 +17,13 @@ struct UserProfileView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    @Query private var profiles: [UserProfile]
-
     @State private var viewModel = UserProfileViewModel()
 
     var body: some View {
         NavigationStack {
             Group {
-                if let profile = profiles.first {
-                    profileForm(for: profile)
+                if viewModel.profile != nil {
+                    profileForm
                 } else {
                     ProgressView()
                 }
@@ -40,16 +40,19 @@ struct UserProfileView: View {
             .task {
                 viewModel.ensureProfileExists(context: modelContext)
             }
+            .onDisappear {
+                viewModel.commitPendingDrafts(context: modelContext)
+            }
         }
     }
 
     // MARK: - Formulario
 
-    private func profileForm(for profile: UserProfile) -> some View {
+    private var profileForm: some View {
         Form {
             Section {
                 ForEach(DietaryRestriction.allCases) { restriction in
-                    Toggle(restriction.rawValue, isOn: restrictionBinding(restriction, in: profile))
+                    Toggle(restriction.rawValue, isOn: restrictionBinding(restriction))
                 }
             } header: {
                 Text("Restricciones dietéticas")
@@ -59,7 +62,6 @@ struct UserProfileView: View {
 
             listSection(
                 kind: .forbidden,
-                profile: profile,
                 title: "Alergias e ingredientes prohibidos",
                 placeholder: "Ej. maní, mariscos",
                 footer: "No se usarán en las recetas. Aun así, revisa siempre los ingredientes antes de cocinar."
@@ -67,7 +69,6 @@ struct UserProfileView: View {
 
             listSection(
                 kind: .favorite,
-                profile: profile,
                 title: "Ingredientes favoritos",
                 placeholder: "Ej. albahaca, queso",
                 footer: "Se incluirán cuando encajen de forma natural en la receta."
@@ -75,38 +76,36 @@ struct UserProfileView: View {
 
             listSection(
                 kind: .staple,
-                profile: profile,
                 title: "Despensa básica",
                 placeholder: "Ej. sal, aceite, pimienta",
-                footer: "Lo que siempre tienes en casa: se puede usar aunque no esté en tu inventario.\n\nTu perfil se guarda en este dispositivo. Al generar una receta, estas preferencias se envían a Gemini (Google) junto con tu inventario."
+                footer: "Lo que siempre tienes en casa: se puede usar aunque no esté en tu inventario, y no aparece en tu inventario ni se descuenta al cocinar. Toca un básico para marcarlo como agotado; los agotados no se envían a la IA.\n\nTu perfil se guarda en este dispositivo. Al generar una receta, estas preferencias se envían a Gemini (Google) junto con tu inventario."
             )
         }
     }
 
     private func listSection(
         kind: ProfileListKind,
-        profile: UserProfile,
         title: String,
         placeholder: String,
         footer: String
     ) -> some View {
         Section {
-            ForEach(profile[keyPath: kind.keyPath], id: \.self) { item in
-                Text(item)
+            ForEach(viewModel.items(for: kind), id: \.self) { item in
+                row(for: item, kind: kind)
             }
             .onDelete { offsets in
-                viewModel.remove(at: offsets, from: kind, in: profile, context: modelContext)
+                viewModel.remove(at: offsets, from: kind, context: modelContext)
             }
 
             HStack {
                 TextField(placeholder, text: draftBinding(for: kind))
                     .submitLabel(.done)
                     .onSubmit {
-                        viewModel.addDraft(for: kind, to: profile, context: modelContext)
+                        viewModel.addDraft(for: kind, context: modelContext)
                     }
 
                 Button {
-                    viewModel.addDraft(for: kind, to: profile, context: modelContext)
+                    viewModel.addDraft(for: kind, context: modelContext)
                 } label: {
                     Image(systemName: "plus.circle.fill")
                 }
@@ -120,12 +119,50 @@ struct UserProfileView: View {
         }
     }
 
+    // MARK: - Filas
+
+    /// Fila de un elemento. En la despensa básica es un botón que alterna
+    /// entre disponible y agotado (texto tachado y badge naranja).
+    @ViewBuilder
+    private func row(for item: String, kind: ProfileListKind) -> some View {
+        if kind == .staple {
+            let isOut = viewModel.isOutOfStock(item)
+
+            Button {
+                viewModel.toggleOutOfStock(item, context: modelContext)
+            } label: {
+                HStack {
+                    Text(item)
+                        .strikethrough(isOut)
+                        .foregroundStyle(isOut ? .secondary : .primary)
+
+                    Spacer()
+
+                    if isOut {
+                        Text("AGOTADO")
+                            .font(.system(.caption2, design: .rounded))
+                            .fontWeight(.bold)
+                            .tracking(0.4)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.orange.opacity(0.16)))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            Text(item)
+        }
+    }
+
     // MARK: - Bindings
 
-    private func restrictionBinding(_ restriction: DietaryRestriction, in profile: UserProfile) -> Binding<Bool> {
+    private func restrictionBinding(_ restriction: DietaryRestriction) -> Binding<Bool> {
         Binding(
-            get: { viewModel.isSelected(restriction, in: profile) },
-            set: { viewModel.setRestriction(restriction, isOn: $0, in: profile, context: modelContext) }
+            get: { viewModel.isSelected(restriction) },
+            set: { viewModel.setRestriction(restriction, isOn: $0, context: modelContext) }
         )
     }
 

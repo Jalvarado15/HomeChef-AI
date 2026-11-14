@@ -3,8 +3,8 @@
 //  HomeChef AI
 //
 //  Hoja de confirmación de "¡Ya la cociné!": lista los productos del
-//  inventario que se van a descontar, deja ajustar cuánto se usó de cada
-//  uno e indica cuáles se eliminarán por quedar en 0.
+//  inventario que se van a descontar (ajustables), indica cuáles se eliminan
+//  por quedar en 0 y permite decidir si la receta se conserva en el historial.
 //
 
 import SwiftUI
@@ -15,17 +15,33 @@ struct CookedConfirmationView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    /// Se puede confirmar si hay algo que descontar o si la receta se va a eliminar.
+    private var canConfirm: Bool {
+        viewModel.hasAnythingToDeduct || !viewModel.keepRecipe
+    }
+
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    ForEach($viewModel.deductions) { $deduction in
-                        DeductionRow(deduction: $deduction)
+                    if viewModel.deductions.isEmpty {
+                        Text("No encontré productos de tu inventario en esta receta.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach($viewModel.deductions) { $deduction in
+                            DeductionRow(deduction: $deduction)
+                        }
                     }
                 } header: {
                     Text("Se descontará de tu inventario")
                 } footer: {
-                    Text("La receta no indica cantidades exactas: ajusta cuánto usaste. Si es todo lo que tenías, el producto se elimina.")
+                    Text("La receta no indica cantidades exactas: ajusta cuánto usaste. Si es todo lo que tenías, el producto se elimina. Los básicos de tu despensa no se descuentan.")
+                }
+
+                Section {
+                    Toggle("Conservar receta en mi historial", isOn: $viewModel.keepRecipe)
+                } footer: {
+                    Text("Si lo desactivas, la receta se elimina al confirmar.")
                 }
             }
             .navigationTitle("¡Buen provecho!")
@@ -40,7 +56,7 @@ struct CookedConfirmationView: View {
                     Button("Confirmar") {
                         onConfirm()
                     }
-                    .disabled(!viewModel.hasAnythingToDeduct)
+                    .disabled(!canConfirm)
                 }
             }
         }

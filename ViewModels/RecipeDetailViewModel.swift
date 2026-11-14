@@ -2,13 +2,12 @@
 //  RecipeDetailViewModel.swift
 //  HomeChef AI
 //
-//  Lógica del botón "¡Ya la cociné!": busca qué productos del inventario
-//  aparecen en la receta, propone cuánto descontar de cada uno y, tras la
-//  confirmación del usuario, aplica los cambios en SwiftData.
+//  Lógica de "¡Ya la cociné!": calcula qué productos del inventario descontar
+//  (excluyendo los básicos de la despensa), aplica el descuento tras la
+//  confirmación y, si el usuario no quiere conservar la receta, la elimina.
 //
-//  Los datos que muestra la hoja de confirmación son copias (nombre y
-//  cantidad al momento de calcular), no referencias a los @Model, para que la
-//  interfaz nunca lea un ítem que ya fue eliminado mientras se cierra.
+//  La hoja de confirmación muestra copias (nombre y cantidad), no referencias
+//  a los @Model, para no leer ítems ya eliminados mientras se cierra.
 //
 
 import Foundation
@@ -37,21 +36,31 @@ final class RecipeDetailViewModel {
 
     var deductions: [Deduction] = []
     var isShowingConfirmation = false
-    var isShowingNoMatchAlert = false
+
+    /// Toggle "Conservar receta en mi historial".
+    var keepRecipe = false
+
+    /// Se activa al confirmar con `keepRecipe == false`; la vista elimina la
+    /// receta cuando la hoja termina de cerrarse.
+    private(set) var discardRecipeOnDismiss = false
 
     var hasAnythingToDeduct: Bool {
         deductions.contains { $0.amount > 0 }
     }
 
-    /// Calcula los productos a descontar. Si no hay coincidencias avisa con
-    /// una alerta; si las hay, abre la hoja de confirmación. Por defecto se
-    /// propone descontar 1 unidad de cada producto (la receta no indica
-    /// cantidades exactas), que el usuario puede ajustar.
-    func prepareDeductions(for recipe: Recipe, inventory: [InventoryItem]) {
+    /// Calcula los productos a descontar y abre la hoja de confirmación.
+    /// - Los básicos de la despensa (`staples`) nunca se sugieren.
+    /// - Por defecto se propone descontar 1 unidad de cada producto (la receta
+    ///   no indica cantidades exactas); el usuario puede ajustarlo.
+    /// - `keepRecipe` arranca en `true` solo si la receta ya estaba guardada.
+    func prepareDeductions(for recipe: Recipe, inventory: [InventoryItem], staples: [String]) {
         let recipeText = recipe.title + "\n" + recipe.content
 
         deductions = inventory
-            .filter { $0.quantity > 0 && IngredientMatcher.matches(itemName: $0.name, in: recipeText) }
+            .filter {
+                $0.quantity > 0 &&
+                IngredientMatcher.matches(itemName: $0.name, in: recipeText, excludingStaples: staples)
+            }
             .map {
                 Deduction(
                     id: $0.id,
@@ -61,15 +70,14 @@ final class RecipeDetailViewModel {
                 )
             }
 
-        if deductions.isEmpty {
-            isShowingNoMatchAlert = true
-        } else {
-            isShowingConfirmation = true
-        }
+        keepRecipe = recipe.isSaved
+        discardRecipeOnDismiss = false
+        isShowingConfirmation = true
     }
 
-    /// Aplica los descuentos: resta la cantidad y, si el ítem llega a 0,
-    /// lo elimina. Guarda los cambios en el contexto.
+    /// Aplica los descuentos (resta o elimina el ítem si llega a 0), guarda y
+    /// cierra la hoja. Si `keepRecipe` es `false`, marca la receta para
+    /// eliminarla cuando la hoja termine de cerrarse.
     func confirmDeductions(inventory: [InventoryItem], context: ModelContext) {
         let itemsByID = Dictionary(
             inventory.map { ($0.id, $0) },
@@ -88,11 +96,19 @@ final class RecipeDetailViewModel {
         }
 
         try? context.save()
+        discardRecipeOnDismiss = !keepRecipe
         isShowingConfirmation = false
+    }
+
+    /// Elimina la receta del contexto y guarda.
+    func discard(_ recipe: Recipe, context: ModelContext) {
+        context.delete(recipe)
+        try? context.save()
     }
 
     /// Limpia el estado una vez cerrada la hoja (por confirmar o cancelar).
     func clearDeductions() {
         deductions = []
+        discardRecipeOnDismiss = false
     }
 }
